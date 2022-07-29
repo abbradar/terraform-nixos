@@ -82,8 +82,8 @@ variable "triggers" {
 }
 
 variable "arguments" {
-  type        = map(any)
-  description = "A map of values to pass to the Nix expression. It only works form 'hermetic' configurations. For secrets, use 'keys' instead."
+  type        = any
+  description = "A map of values to pass to the Nix expression. It's passed as a function argument `arguments` when the configuration is `hermetic` or `flake`, and as a NixOS extra argument otherwise. For secrets, use 'keys' instead."
   default     = {}
 }
 

@@ -10,33 +10,44 @@ shift 4
 
 
 command=(nix-instantiate --show-trace --expr '
-  { system, configuration, hermetic ? false, flake ? false, argumentsJson, ... }:
+  { system, configuration, hermetic ? false, flake ? false, argumentsJson ? "{}", ... }:
   let
     arguments = builtins.fromJSON argumentsJson;
 
-    importFromFlake = { nixosConfig }:
-        let
-          flake = (import (
-                    fetchTarball {
-                      url = "https://github.com/edolstra/flake-compat/archive/99f1c2157fba4bfe6211a321fd0ee43199025dbf.tar.gz";
-                      sha256 = "0x2jn3vrawwv9xp15674wjz9pixwjyj3j771izayl962zziivbx2"; }
-                  ) {
-                    src =  ./.;
-                  }).defaultNix;
-        in
-          builtins.getAttr nixosConfig flake.nixosConfigurations;
+    flakeConfiguration =
+      let
+        flake = (import (
+                  fetchTarball {
+                    url = "https://github.com/edolstra/flake-compat/archive/99f1c2157fba4bfe6211a321fd0ee43199025dbf.tar.gz";
+                    sha256 = "0x2jn3vrawwv9xp15674wjz9pixwjyj3j771izayl962zziivbx2"; }
+                ) {
+                  src =  ./.;
+                }).defaultNix;
+        configs =
+          if flake ? nixosConfigurationsFun
+            then flake.nixosConfigurationsFun { inherit arguments; }
+            else flake.nixosConfigurations;
+      in builtins.getAttr configuration configs;
+
+    hermeticConfiguration =
+      let config = import configuration;
+      in if builtins.isFunction config
+        then config { inherit arguments; }
+        else config;
+
+    impureConfiguration =
+      import <nixpkgs/nixos> {
+        inherit system;
+        configuration = {
+          config._module.args.arguments = arguments;
+          imports = [ configuration ];
+        };
+      };
+
     os =
-      if flake
-         then importFromFlake { nixosConfig = configuration; }
-         else if hermetic
-          then
-            let
-              config = import configuration;
-            in
-            if builtins.isFunction config
-              then config arguments
-              else config
-          else import <nixpkgs/nixos> { inherit system configuration; };
+      if flake then flakeConfiguration
+      else if hermetic then hermeticConfiguration
+      else impureConfiguration;
   in {
     inherit (builtins) currentSystem;
 
